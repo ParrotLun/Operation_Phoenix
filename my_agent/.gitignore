@@ -1,0 +1,26 @@
+# Environment variables (CRITICAL - DON'T COMMIT API KEYS!)
+.env
+.env.local
+.env.*.local
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment (if created in this directory)
+venv/
+.venv/
+
+# Data files (optional - uncomment if you don't want to commit data)
+# data/*.txt
+# data/*.json
+
+# Test outputs
+test_output/
+*.log
+
+# IDE
+.vscode/
+.idea/
