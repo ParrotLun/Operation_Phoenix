@@ -60,6 +60,28 @@ def format_response(result, verbose=False, elapsed_time=None):
             agent_name = getattr(msg, 'name', 'N/A')
             print(f"    {i}. {msg_type:20s} from: {agent_name}")
 
+    # 分析工作流程執行情況
+    if result.get("messages"):
+        messages = result["messages"]
+        agent_transfers = []
+        for msg in messages:
+            if hasattr(msg, 'name') and 'transfer_to_' in str(msg.name):
+                agent_name = msg.name.replace('transfer_to_', '')
+                agent_transfers.append(agent_name)
+
+        if agent_transfers:
+            print(f"\n  🔀 Agent 路由順序: {' → '.join(agent_transfers)}")
+
+            # 檢查多步驟工作流程
+            if len(agent_transfers) >= 2:
+                print(f"  ✅ 多步驟工作流程: 執行了 {len(agent_transfers)} 個 agents")
+            elif len(agent_transfers) == 1:
+                print(f"  ⚠️  單步驟工作流程: 只執行了 1 個 agent")
+                # 檢查是否應該是多步驟
+                user_msg = messages[0].content if messages else ""
+                if any(keyword in user_msg.lower() for keyword in ['and', '並', '然後', 'then']):
+                    print(f"  ⚠️  警告: 請求中包含多步驟關鍵字，但只執行了一步")
+
     # 顯示最終回應
     if result.get("messages"):
         final_message = result["messages"][-1]
