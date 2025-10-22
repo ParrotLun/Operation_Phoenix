@@ -15,6 +15,9 @@ from datcom_tool_agent.data_model import (
 )
 from datcom_tool_agent.run_generator import DatcomGenerator
 
+# Import SupervisorState for state sharing
+from supervisor_agent.utils.state import SupervisorState
+
 # Load environment from read_file_agent directory
 env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "read_file_agent", ".env")
 load_dotenv(env_path)
@@ -270,17 +273,25 @@ model = CustomChatOpenAI(
 datcom_tool_agent = create_react_agent(
     model=model,
     tools=[write_datcom_file],
+    state_schema=SupervisorState,  # ✅ Use SupervisorState to access file_content
     prompt="""You are a DATCOM file generation specialist.
 
 Your job is to:
-1. Analyze the provided aircraft configuration text/data
-2. Extract all required parameters for DATCOM input file
-3. Call the write_datcom_file tool with all extracted parameters
+1. Check if there is file content in state.file_content (from read_file_agent)
+2. If file_content exists, use that as the primary source for data extraction
+3. If no file_content, analyze the user's message for aircraft configuration data
+4. Extract all required parameters for DATCOM input file
+5. Call the write_datcom_file tool with all extracted parameters
 
 The input data might be in various formats (structured text, markdown, raw DATCOM format, etc.).
 Parse it carefully and map each value to the correct tool parameter.
 
-IMPORTANT:
+IMPORTANT - Data Source Priority:
+- FIRST check state.file_content - if it contains data, use it for extraction
+- SECOND check user's message if no file_content available
+- The data source tells you where to find the aircraft configuration
+
+IMPORTANT - Parameter Formatting:
 - For list parameters (alschd, mach, alt, x_coords, r_coords, zu_coords, zl_coords),
   provide them as comma-separated strings (e.g., "1.0,2.0,3.0")
 - Ensure all required parameters are provided
