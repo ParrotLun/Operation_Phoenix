@@ -4,20 +4,22 @@ A LangGraph multi-agent system using supervisor pattern to coordinate between sp
 
 ## Architecture
 
-This system uses `langgraph-supervisor` to coordinate between two specialized agents:
+This system uses `langgraph-supervisor` to coordinate between three specialized agents:
 
 1. **read_file_agent**: Handles file reading operations (specifically `read_file_agent/data/msg.txt`)
 2. **tool_agent**: Handles general utility tasks (time, calculations, string operations)
+3. **datcom_tool_agent**: Handles DATCOM file generation (LLM-driven parsing + file writing)
 
 ```
 User Input
     ↓
 Supervisor (LLM-based routing)
     ↓
-┌───────────────┬───────────────┐
-│ read_file_agent│  tool_agent  │
-└───────────────┴───────────────┘
-    ↓               ↓
+┌─────────────┬─────────────┬──────────────────┐
+│read_file_   │ tool_agent  │ datcom_tool_     │
+│agent        │             │ agent            │
+└─────────────┴─────────────┴──────────────────┘
+    ↓               ↓              ↓
 Response to User
 ```
 
@@ -117,11 +119,33 @@ print(final_message.content)
 - "Calculate 123 * 456"
 - "Reverse the string 'hello'"
 
+### datcom_tool_agent
+
+**Purpose**: DATCOM file generation (LLM-driven parsing + file writing)
+
+**Tools**:
+- `write_datcom_file(...)`: Generates DATCOM for005.dat file from parsed parameters
+
+**Features**:
+- ✅ LLM-driven parsing of aircraft configuration data
+- ✅ Supports multiple input formats (Markdown, DATCOM format, natural language)
+- ✅ Pydantic validation for all DATCOM cards
+- ✅ Smart number formatting (integers → `6.0`, floats → up to 4 decimals)
+- ✅ Output to `datcom_tool_agent/output/for005.dat`
+
+**Example requests**:
+- "請根據以下數據產生 DATCOM 檔案：攻角 1-6 度，馬赫數 0.5489..."
+- "Generate DATCOM input file for PC-9 aircraft"
+- "Parse this aircraft config and create for005.dat"
+
+**See**: [datcom_tool_agent/README.md](../datcom_tool_agent/README.md) for detailed documentation
+
 ## Supervisor Logic
 
 The supervisor analyzes user requests and routes them to the appropriate agent:
 
 - File reading requests → `read_file_agent`
+- DATCOM file generation/parsing → `datcom_tool_agent`
 - Time/calculation/string operations → `tool_agent`
 
 The supervisor uses an LLM to make intelligent routing decisions based on the user's intent.
