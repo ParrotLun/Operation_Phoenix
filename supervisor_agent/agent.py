@@ -1,6 +1,7 @@
 """
 Supervisor Multi-Agent System
 Coordinates between read_file_agent, tool_agent, and datcom_tool_agent using supervisor pattern
+Note: tool_agent is kept for system stability, though not actively used
 """
 import os
 from langchain_openai import ChatOpenAI
@@ -16,7 +17,7 @@ from supervisor_agent.utils.state import SupervisorState
 # 方式 2: 直接從 read_file_agent/ 資料夾導入原始 graph（推薦）
 from read_file_agent.agent import graph as read_file_agent
 
-from supervisor_agent.agents.tool_agent import tool_agent
+from supervisor_agent.agents.tool_agent import tool_agent  # Kept for stability
 
 # 導入 DATCOM tool agent
 from datcom_tool_agent.agent import datcom_tool_agent
@@ -54,54 +55,57 @@ supervisor = create_supervisor(
     # 暫時恢復 handoff_back_messages 以確保多步驟工作流程正常
     # add_handoff_back_messages=False,  # 這個會導致多步驟流程中斷
     # output_mode='last_message',  # 這個可能讓 Supervisor 看不到完整歷史
-    prompt="""You are a supervisor managing three specialized agents:
+    prompt="""You are a supervisor managing two main specialized agents:
+
+NOTE: tool_agent exists but is NOT actively used - ignore it for routing decisions
 
 1. **read_file_agent**: Handles all file reading operations. Use this agent when the user wants to read files, especially msg.txt.
    - Stores file content in state.file_content for other agents to use
    - IMPORTANT: After this agent completes, you should continue routing to the next agent if needed (DO NOT return to user yet)
 
-2. **tool_agent**: Handles general utility tasks like getting current time, performing calculations, or reversing strings.
-
-3. **datcom_tool_agent**: Handles DATCOM file generation. Use this agent when the user wants to:
+2. **datcom_tool_agent**: Handles DATCOM file generation. Use this agent when the user wants to:
    - Generate DATCOM input files (for005.dat)
    - Parse aircraft configuration data and convert it to DATCOM format
    - Process DATCOM-related data
    - This agent can read from state.file_content if read_file_agent was used first
 
-CRITICAL RULES FOR EFFICIENCY:
-1. When you identify a multi-step workflow, DO NOT stop after each step
-2. Complete ALL required steps before finishing
-3. Only return FINISH when the ENTIRE user request is complete
-4. Agents will automatically transfer back to you - immediately route to the next agent
+CRITICAL RULES FOR MULTI-STEP WORKFLOWS:
+1. Analyze the COMPLETE user request FIRST
+2. If the request contains keywords like "並"/"and"/"then"/"產生"/"generate" = MULTI-STEP WORKFLOW
+3. NEVER finish after just one step in a multi-step workflow
+4. When an agent returns to you, check if MORE work is needed
+5. Only finish when ALL requested tasks are complete
 
-Your job is to:
-- Analyze the user's COMPLETE request upfront
-- Identify if it's single-step or multi-step
-- Execute ALL steps sequentially
-- Only finish when everything is done
+MULTI-STEP WORKFLOW DETECTION:
+- "讀取...並產生..." = 2 steps: read THEN generate
+- "讀取...然後..." = 2 steps: read THEN next action
+- "read...and generate..." = 2 steps: read THEN generate
+- "read...then write..." = 2 steps: read THEN write
 
-Routing guidelines:
-- File reading (msg.txt, etc.) → read_file_agent → CONTINUE to next agent if needed
-- DATCOM file generation/parsing → datcom_tool_agent
-- General utilities (time, calculations, strings) → tool_agent
+EXECUTION STEPS FOR "read file AND generate DATCOM":
+Step 1: Route to read_file_agent
+        └─> Wait for return
+Step 2: read_file_agent returns → IMMEDIATELY route to datcom_tool_agent (DO NOT FINISH!)
+        └─> Wait for return
+Step 3: datcom_tool_agent returns → NOW finish and respond to user
 
-MULTI-STEP WORKFLOWS (EXECUTE ALL STEPS):
-Pattern: "read file AND generate DATCOM"
-Step 1: Route to read_file_agent (reads file → stores in state.file_content)
-Step 2: When read_file_agent returns, IMMEDIATELY route to datcom_tool_agent (DO NOT finish yet)
-Step 3: When datcom_tool_agent returns, NOW you can finish
+SINGLE vs MULTI-STEP EXAMPLES:
+❌ WRONG: "讀取 msg.txt 並產生 DATCOM 檔案" → read_file_agent → FINISH (missing datcom step!)
+✅ CORRECT: "讀取 msg.txt 並產生 DATCOM 檔案" → read_file_agent → datcom_tool_agent → FINISH
 
-Examples with routing decisions:
-- "讀取 msg.txt 並產生 DATCOM 檔案" → read_file_agent → (wait for return) → datcom_tool_agent → FINISH
-- "請根據 msg.txt 的內容產生 for005.dat" → read_file_agent → datcom_tool_agent → FINISH
-- "產生 DATCOM 檔案" (with data in message) → datcom_tool_agent → FINISH
-- "讀取 msg.txt" → read_file_agent → FINISH
-- "What's the time?" → tool_agent → FINISH
+❌ WRONG: "Read msg.txt and generate DATCOM" → read_file_agent → FINISH (missing datcom step!)
+✅ CORRECT: "Read msg.txt and generate DATCOM" → read_file_agent → datcom_tool_agent → FINISH
 
-EFFICIENCY TIP: Each routing decision counts as one LLM call. Minimize calls by:
-- Planning the full workflow upfront
-- Not stopping in the middle unnecessarily
-- Continuing to the next step immediately when an agent returns
+✅ CORRECT: "讀取 msg.txt" → read_file_agent → FINISH (single step, ok to finish)
+✅ CORRECT: "產生 DATCOM 檔案" → datcom_tool_agent → FINISH (single step, ok to finish)
+
+YOUR DECISION PROCESS:
+1. Read user request
+2. Count how many actions requested (read? generate? both?)
+3. If 2 actions → Execute BOTH before finishing
+4. If 1 action → Execute it and finish
+
+REMEMBER: "並"/"and" means DO BOTH STEPS!
 """
 )
 
