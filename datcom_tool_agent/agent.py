@@ -246,7 +246,46 @@ def write_datcom_file(
         generator = DatcomGenerator()
         generator.generate_file(datcom_input, case_id, output_path)
 
-        return f"✅ Successfully wrote DATCOM file to: {output_path}"
+        # 📝 準備 DATCOM 資料結構（用於 state.latest_datcom）
+        datcom_summary = {
+            "case_id": case_id,
+            "output_path": output_path,
+            "generated_at": __import__('datetime').datetime.now().isoformat(),
+            "parameters": {
+                "flight_conditions": {
+                    "nalpha": nalpha,
+                    "alschd": alschd,
+                    "nmach": nmach,
+                    "mach": mach,
+                    "nalt": nalt,
+                    "alt": alt,
+                    "wt": wt
+                },
+                "wing": {
+                    "naca": wing_naca,
+                    "chrdtp": wing_chrdtp,
+                    "sspn": wing_sspn,
+                    "chrdr": wing_chrdr
+                },
+                "htail": {
+                    "naca": htail_naca,
+                    "chrdtp": htail_chrdtp,
+                    "sspn": htail_sspn
+                },
+                "vtail": {
+                    "naca": vtail_naca,
+                    "chrdtp": vtail_chrdtp,
+                    "sspn": vtail_sspn
+                }
+            }
+        }
+
+        # 🔄 這裡的 return 包含更新 state 的資料
+        # LangGraph 的 tool 可以返回 dict 來更新 state
+        return {
+            "messages": [f"✅ Successfully wrote DATCOM file to: {output_path}"],
+            "latest_datcom": datcom_summary  # 更新 state.latest_datcom
+        }
 
     except Exception as e:
         return f"❌ Error writing DATCOM file: {str(e)}"
