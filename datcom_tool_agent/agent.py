@@ -280,15 +280,19 @@ def write_datcom_file(
             }
         }
 
-        # 🔄 這裡的 return 包含更新 state 的資料
-        # LangGraph 的 tool 可以返回 dict 來更新 state
-        return {
-            "messages": [f"✅ Successfully wrote DATCOM file to: {output_path}"],
-            "latest_datcom": datcom_summary  # 更新 state.latest_datcom
-        }
+        # Store in global for state update (workaround for tool limitation)
+        global _last_datcom_summary
+        _last_datcom_summary = datcom_summary
+
+        # Tools must return strings for create_react_agent
+        return f"✅ Successfully wrote DATCOM file to: {output_path}"
 
     except Exception as e:
         return f"❌ Error writing DATCOM file: {str(e)}"
+
+
+# Global storage for datcom summary (to be picked up by wrapper node)
+_last_datcom_summary = None
 
 
 # Custom ChatOpenAI that doesn't send parallel_tool_calls parameter
@@ -309,7 +313,7 @@ model = CustomChatOpenAI(
 )
 
 # Create datcom_tool_agent using prebuilt component
-datcom_tool_agent = create_react_agent(
+_base_datcom_agent = create_react_agent(
     model=model,
     tools=[write_datcom_file],
     state_schema=SupervisorState,  # ✅ Use SupervisorState to access file_content
@@ -339,6 +343,36 @@ IMPORTANT - Parameter Formatting:
 """,
     name="datcom_tool_agent"
 )
+
+
+# Wrapper node to add state updates
+from langgraph.graph import StateGraph, START, END
+
+def agent_node(state: SupervisorState) -> dict:
+    """
+    Node that runs the base agent and adds latest_datcom to state
+    """
+    global _last_datcom_summary
+
+    # Run the base agent
+    result = _base_datcom_agent.invoke(state)
+
+    # If we have a datcom summary from the tool, add it to result
+    if _last_datcom_summary is not None:
+        result["latest_datcom"] = _last_datcom_summary
+        _last_datcom_summary = None  # Reset for next run
+
+    return result
+
+
+# Create a wrapper graph
+wrapper_graph = StateGraph(SupervisorState)
+wrapper_graph.add_node("agent", agent_node)
+wrapper_graph.add_edge(START, "agent")
+wrapper_graph.add_edge("agent", END)
+
+datcom_tool_agent = wrapper_graph.compile()
+datcom_tool_agent.name = "datcom_tool_agent"
 
 # Export as app
 app = datcom_tool_agent

@@ -7,7 +7,8 @@ import os
 import re
 from typing import Dict, Any, Optional
 from langgraph.graph import StateGraph, START, END
-from read_file_agent.utils.state import AgentState
+# Use SupervisorState to include parsed_file_data field
+from supervisor_agent.utils.state import SupervisorState
 from langchain_core.messages import AIMessage
 
 
@@ -65,7 +66,7 @@ def _parse_file_content(content: str) -> Dict[str, Any]:
 
     return parsed
 
-def read_file_node(state: AgentState) -> dict:
+def read_file_node(state: SupervisorState) -> dict:
     """
     讀取 msg.txt 文件並存到 state
     這個 node 不使用 LLM，直接讀檔
@@ -117,7 +118,7 @@ def read_file_node(state: AgentState) -> dict:
         }
 
 # 構建最簡單的 graph: START → read_file → END
-graph_builder = StateGraph(AgentState)
+graph_builder = StateGraph(SupervisorState)
 
 # 添加讀檔節點
 graph_builder.add_node("read_file", read_file_node)
